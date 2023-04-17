@@ -21,9 +21,3 @@ def get_s(n, p_dash, q_dash, phi):
             break
     return s
 
-def lagrange_basis_polynomial(i, x, selected_indices, n_fact = 1):
-    out = n_fact
-    for j in selected_indices:
-        if j != i:
-            out *= (x - j)/(i - j)
-    return int(out)
