@@ -9,7 +9,7 @@ def get_germain_prime(bits):
     for n in range(start, end):
         p = 2*n + 1
         if sympy.isprime(p) and sympy.isprime(2*p + 1):
-            print("The Germain prime is:", p)
+            # print("The Germain prime is:", p)
             break
     return p
 
