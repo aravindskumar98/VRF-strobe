@@ -13,11 +13,13 @@ def get_germain_prime(bits):
             break
     return p
 
-def get_s(n, p_dash, q_dash, phi):
-    # Calculate the value of s
-    s = n+1
-    for s in range(4*n, min(p_dash, q_dash)):
-        if (p_dash > s > n) and (q_dash > s > n) and (phi % s != 0):
-            break
-    return s
+def lagrange_basis_polynomial(i, x, selected_indices, n_fact = 1):
+    out = n_fact # This prevents floating point errors
+    for j in selected_indices:
+        if j != i:
+            out *= (x - j)
+            out //=(i - j)
+    return out
+
+
 
