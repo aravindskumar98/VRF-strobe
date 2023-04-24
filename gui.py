@@ -10,7 +10,9 @@ class NodeGUI:
         self.create_widgets()
 
     def create_widgets(self):
-        header = ttk.Label(self.root, text="Node Information", font=("Arial", 24))
+        # self.root.geometry("1600x400")
+
+        header = ttk.Label(self.root, text="Strobe - Minimal Simulation", font=("Arial", 24))
         header.grid(column=0, row=0, padx=10, pady=10)
 
         self.node_frame = ttk.Frame(self.root)
@@ -24,8 +26,8 @@ class NodeGUI:
             label.grid(column=0, row=i, padx=5, pady=5)
             self.nodes[i] = label
 
-    def update_node_info(self, node_id, round_num, rand_num):
-        self.nodes[node_id].config(text=f"Node {node_id}: Round {round_num} - Random Number: {rand_num}")
+    def update_node_info(self, node_id, round_num, rand_num, prev_round_time, data_received):
+        self.nodes[node_id].config(text=f"Node {node_id}: Round {round_num} - Random Number: {rand_num} - Time Taken: {prev_round_time:.3f} sec - Data Received: {data_received} bytes")
 
     def update(self):
         self.root.update()

@@ -9,23 +9,25 @@ from setup import setup, gen
 import socket
 import json
 from gui import NodeGUI
+import time
 
 NUM_NODES = 8
 MIN_MSGS_TO_SEND = 4
 
 class Node:
-    def __init__(self, id, message_queues, gui):
+    def __init__(self, id, gui):
         self.id = id
-        self.message_queues = message_queues
         self.rounds_received = defaultdict(set)
         self.current_round = 0
         self.received_messages_count = 0
         self.gui = gui
+        self.time_taken_per_round = [-1]
+        self.data_received_per_round = [-1]
+        self.round_start_time = 0
 
     # Update the GUI when a new round is reached
     def update_gui(self):
-        self.gui.update_node_info(self.id, self.current_round, self.x_curr)
-
+        self.gui.update_node_info(self.id, self.current_round, self.x_curr, self.time_taken_per_round[-1], self.data_received_per_round[-1])
 
     def add_params(self, n, phi, N, s, a_coeff, x_0):
         self.N = N
@@ -62,6 +64,8 @@ class Node:
 
     async def start(self):
         server = await asyncio.start_server(self.server_callback, 'localhost', 8000 + self.id)
+        self.round_start_time = time.time()
+        self.data_received_in_bytes = 0
         async with server:
             await asyncio.gather(
                 asyncio.create_task(self.send_messages())
@@ -93,6 +97,7 @@ class Node:
 
     async def server_callback(self, reader, writer):
         data = await reader.read(100)
+        self.data_received_in_bytes += len(data)
         msg = json.loads(data.decode())
 
         round_num = msg["round"]
@@ -115,37 +120,15 @@ class Node:
                 
                 self.current_round += 1
                 print(f"Reached round {self.current_round} for node {self.id} -> Message = {self.x_curr}")
+                current_time = time.time()
+                self.time_taken_per_round.append(current_time - self.round_start_time)
+                self.data_received_per_round.append(self.data_received_in_bytes)
+                self.data_received_in_bytes = 0
+                self.round_start_time = current_time
                 self.update_gui()
 
         writer.close()
         await writer.wait_closed()
-
-    async def receive_messages(self):
-        while True:
-            msg = await self.message_queues[self.id].get()
-            round_num = msg["round"]
-            msg_sender = msg["sender"]
-            x_part = msg["x_part"]
-            # print(f"Received message in node {self.id} from node {msg_sender} in round {round_num} : count {self.received_messages_count}")
-            self.received_messages_count += 1
-
-            if round_num == self.current_round:
-                self.rounds_received[round_num].add((msg_sender+1, x_part))
-
-                if len(self.rounds_received[round_num]) >= MIN_MSGS_TO_SEND:
-                    # Increment the round and start sending new messages
-                    senders = [x[0] for x in self.rounds_received[round_num]]
-                    x_next_array = {x[0]: x[1] for x in self.rounds_received[round_num]}
-                    x_next = self._combine(x_next_array, senders)
-                    if self._verify(x_next, self.x_curr):
-                        print(f"Node {self.id} verified the share")
-                        self.x_curr = x_next
-                    else:
-                        print(f"Node {self.id} failed to verify the share")
-                    
-                    self.current_round += 1
-                    print(f"Reached round {self.current_round} for node {self.id} -> Message = {self.x_curr}")
-
 
 async def main():
 
@@ -159,15 +142,13 @@ async def main():
     gui = NodeGUI(n)
     # gui.start()
 
-    message_queues = [asyncio.Queue() for _ in range(NUM_NODES)]
-    nodes = [Node(i, message_queues, gui) for i in range(NUM_NODES)]
+    nodes = [Node(i, gui) for i in range(NUM_NODES)]
     for node in nodes:
         node.add_params(n, phi, N, s, a_coeff, x_0)
 
     tasks = [node.start() for node in nodes] + [update_gui_periodically(gui)]
 
     await asyncio.gather(*tasks)
-
 
 if __name__ == "__main__":
     asyncio.run(main())
