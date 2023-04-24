@@ -6,11 +6,12 @@ import sympy
 from utils import *
 import math
 from setup import setup, gen
+import socket
+import json
+
 
 NUM_NODES = 8
 MIN_MSGS_TO_SEND = 4
-
-
 
 class Node:
     def __init__(self, id, message_queues):
@@ -54,10 +55,11 @@ class Node:
         return False
 
     async def start(self):
-        await asyncio.gather(
-            asyncio.create_task(self.receive_messages()),
-            asyncio.create_task(self.send_messages())
-        )
+        server = await asyncio.start_server(self.server_callback, 'localhost', 8000 + self.id)
+        async with server:
+            await asyncio.gather(
+                asyncio.create_task(self.send_messages())
+            )
 
     async def send_messages(self):
         await asyncio.sleep(1)  # Wait for all nodes to start
@@ -67,12 +69,49 @@ class Node:
             options = [i for i in range(NUM_NODES) if i != self.id]
             random.shuffle(options)
             for i in options:
-                # print(f"Sending message from node {self.id} to node {i} in round {self.current_round} with completion level {len(self.rounds_received[self.current_round])} ")
                 if i != self.id:
-                    await self.message_queues[i].put(msg)
+                    await self.send_message_to_socket(i, msg)
                     await asyncio.sleep(random.uniform(0.1, 0.5))  # Add random small delay
 
             await asyncio.sleep(0.1)  # Wait for the next round
+
+    async def send_message_to_socket(self, target_id, message):
+        try:
+            reader, writer = await asyncio.open_connection(f'localhost', 8000 + target_id)
+            writer.write(json.dumps(message).encode())
+            await writer.drain()
+            writer.close()
+            await writer.wait_closed()
+        except ConnectionRefusedError:
+            pass
+
+    async def server_callback(self, reader, writer):
+        data = await reader.read(100)
+        msg = json.loads(data.decode())
+
+        round_num = msg["round"]
+        msg_sender = msg["sender"]
+        x_part = msg["x_part"]
+        self.received_messages_count += 1
+
+        if round_num == self.current_round:
+            self.rounds_received[round_num].add((msg_sender+1, x_part))
+
+            if len(self.rounds_received[round_num]) >= MIN_MSGS_TO_SEND:
+                senders = [x[0] for x in self.rounds_received[round_num]]
+                x_next_array = {x[0]: x[1] for x in self.rounds_received[round_num]}
+                x_next = self._combine(x_next_array, senders)
+                if self._verify(x_next, self.x_curr):
+                    print(f"Node {self.id} verified the share")
+                    self.x_curr = x_next
+                else:
+                    print(f"Node {self.id} failed to verify the share")
+                
+                self.current_round += 1
+                print(f"Reached round {self.current_round} for node {self.id} -> Message = {self.x_curr}")
+
+        writer.close()
+        await writer.wait_closed()
 
     async def receive_messages(self):
         while True:
