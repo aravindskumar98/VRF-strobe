@@ -12,10 +12,11 @@ from gui import NodeGUI
 import time
 
 NUM_NODES = 8
+MAL_NODES = 2
 MIN_MSGS_TO_SEND = 4
 
 class Node:
-    def __init__(self, id, gui):
+    def __init__(self, id, gui, status):
         self.id = id
         self.rounds_received = defaultdict(set)
         self.current_round = 0
@@ -24,6 +25,8 @@ class Node:
         self.time_taken_per_round = [-1]
         self.data_received_per_round = [-1]
         self.round_start_time = 0
+        self.prev_output = 0
+        self.status = status
 
     # Update the GUI when a new round is reached
     def update_gui(self):
@@ -39,6 +42,9 @@ class Node:
 
     def _eval(self):
         x_next_i = pow(self.x_curr, self.sk, self.N)
+        self.prev_output = x_next_i
+        if self.status == "mal" and self.current_round > 0:
+            return 24 #hardcode random 24
         return x_next_i
 
     def _verify_share(self, x_next_i, x_curr_i):
@@ -75,7 +81,7 @@ class Node:
         await asyncio.sleep(1)  # Wait for all nodes to start
 
         while True:
-            msg = {"sender": self.id, "round": self.current_round, "x_part": self._eval()}
+            msg = {"sender": self.id, "round": self.current_round, "prev_output": self.prev_output, "x_part": self._eval()}
             options = [i for i in range(NUM_NODES) if i != self.id]
             random.shuffle(options)
             for i in options:
@@ -103,29 +109,31 @@ class Node:
         round_num = msg["round"]
         msg_sender = msg["sender"]
         x_part = msg["x_part"]
+        prev_out = msg["prev_output"]
         self.received_messages_count += 1
 
         if round_num == self.current_round:
-            self.rounds_received[round_num].add((msg_sender+1, x_part))
+            if self.current_round == 0 or self._verify_share(x_part, prev_out):
+                self.rounds_received[round_num].add((msg_sender+1, x_part))
 
-            if len(self.rounds_received[round_num]) >= MIN_MSGS_TO_SEND:
-                senders = [x[0] for x in self.rounds_received[round_num]]
-                x_next_array = {x[0]: x[1] for x in self.rounds_received[round_num]}
-                x_next = self._combine(x_next_array, senders)
-                if self._verify(x_next, self.x_curr):
-                    print(f"Node {self.id} verified the share")
-                    self.x_curr = x_next
-                else:
-                    print(f"Node {self.id} failed to verify the share")
+                if len(self.rounds_received[round_num]) >= MIN_MSGS_TO_SEND:
+                    senders = [x[0] for x in self.rounds_received[round_num]]
+                    x_next_array = {x[0]: x[1] for x in self.rounds_received[round_num]}
+                    x_next = self._combine(x_next_array, senders)
+                    if self._verify(x_next, self.x_curr):
+                        print(f"Node {self.id} verified the share")
+                        self.x_curr = x_next
+                    else:
+                        print(f"Node {self.id} failed to verify the share")
                 
-                self.current_round += 1
-                print(f"Reached round {self.current_round} for node {self.id} -> Message = {self.x_curr}")
-                current_time = time.time()
-                self.time_taken_per_round.append(current_time - self.round_start_time)
-                self.data_received_per_round.append(self.data_received_in_bytes)
-                self.data_received_in_bytes = 0
-                self.round_start_time = current_time
-                self.update_gui()
+                    self.current_round += 1
+                    print(f"Reached round {self.current_round} for node {self.id} -> Message = {self.x_curr}")
+                    current_time = time.time()
+                    self.time_taken_per_round.append(current_time - self.round_start_time)
+                    self.data_received_per_round.append(self.data_received_in_bytes)
+                    self.data_received_in_bytes = 0
+                    self.round_start_time = current_time
+                    self.update_gui()
 
         writer.close()
         await writer.wait_closed()
@@ -133,6 +141,7 @@ class Node:
 async def main():
 
     n = NUM_NODES
+    m = MAL_NODES
     t = MIN_MSGS_TO_SEND
 
     N, phi, s, a_coeff = setup(n,t)
@@ -142,7 +151,7 @@ async def main():
     gui = NodeGUI(n)
     # gui.start()
 
-    nodes = [Node(i, gui) for i in range(NUM_NODES)]
+    nodes = [Node(i, gui, "honest") for i in range(NUM_NODES-MAL_NODES)] + [Node(i, gui, "mal") for i in range(NUM_NODES-MAL_NODES, NUM_NODES)]
     for node in nodes:
         node.add_params(n, phi, N, s, a_coeff, x_0)
 
