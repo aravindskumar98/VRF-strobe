@@ -8,18 +8,24 @@ import math
 from setup import setup, gen
 import socket
 import json
-
+from gui import NodeGUI
 
 NUM_NODES = 8
 MIN_MSGS_TO_SEND = 4
 
 class Node:
-    def __init__(self, id, message_queues):
+    def __init__(self, id, message_queues, gui):
         self.id = id
         self.message_queues = message_queues
         self.rounds_received = defaultdict(set)
         self.current_round = 0
         self.received_messages_count = 0
+        self.gui = gui
+
+    # Update the GUI when a new round is reached
+    def update_gui(self):
+        self.gui.update_node_info(self.id, self.current_round, self.x_curr)
+
 
     def add_params(self, n, phi, N, s, a_coeff, x_0):
         self.N = N
@@ -109,6 +115,7 @@ class Node:
                 
                 self.current_round += 1
                 print(f"Reached round {self.current_round} for node {self.id} -> Message = {self.x_curr}")
+                self.update_gui()
 
         writer.close()
         await writer.wait_closed()
@@ -139,6 +146,7 @@ class Node:
                     self.current_round += 1
                     print(f"Reached round {self.current_round} for node {self.id} -> Message = {self.x_curr}")
 
+
 async def main():
 
     n = NUM_NODES
@@ -148,13 +156,18 @@ async def main():
 
     x_0 = gen(math.factorial(n), N)
 
+    gui = NodeGUI(n)
+    # gui.start()
+
     message_queues = [asyncio.Queue() for _ in range(NUM_NODES)]
-    nodes = [Node(i, message_queues) for i in range(NUM_NODES)]
+    nodes = [Node(i, message_queues, gui) for i in range(NUM_NODES)]
     for node in nodes:
         node.add_params(n, phi, N, s, a_coeff, x_0)
 
-    tasks = [node.start() for node in nodes]
+    tasks = [node.start() for node in nodes] + [update_gui_periodically(gui)]
+
     await asyncio.gather(*tasks)
+
 
 if __name__ == "__main__":
     asyncio.run(main())

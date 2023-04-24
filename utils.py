@@ -1,4 +1,5 @@
 import sympy
+import asyncio
 
 def get_germain_prime(bits):
     # Set the range of values to search for a Germain prime
@@ -20,6 +21,11 @@ def lagrange_basis_polynomial(i, x, selected_indices, n_fact = 1):
             out *= (x - j)
             out //=(i - j)
     return out
+
+async def update_gui_periodically(gui, interval=0.01):
+    while True:
+        gui.update()
+        await asyncio.sleep(interval)
 
 
 
