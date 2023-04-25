@@ -14,10 +14,36 @@ import time
 NUM_NODES = 8
 MIN_MSGS_TO_SEND = 4
 
+class Beacon:
+    def __init__(self, x_0, N, s):
+        self.latest_x_curr = x_0
+        self.highest_round_num = 0
+        self.N = N
+        self.s = s
+
+    def update_beacon(self, round_num, x_curr):
+        if round_num > self.highest_round_num:
+            print("Beacon updated")
+            self.highest_round_num = round_num
+            self.latest_x_curr = x_curr
+
+    def get_latest_x_curr(self):
+        return self.latest_x_curr
+
+    def get_highest_round_num(self):
+        return self.highest_round_num
+    
+    def _verify(self, x_next, x_curr):
+        x_curr %= self.N
+        if x_curr == pow(x_next, self.s, self.N):
+            return True
+        return False
+
 class Node:
-    def __init__(self, id, gui):
+    def __init__(self, id, gui, beacon):
         self.id = id
         self.rounds_received = defaultdict(set)
+        self.beacon = beacon
         self.current_round = 0
         self.received_messages_count = 0
         self.gui = gui
@@ -27,7 +53,7 @@ class Node:
 
     # Update the GUI when a new round is reached
     def update_gui(self):
-        self.gui.update_node_info(self.id, self.current_round, self.x_curr, self.time_taken_per_round[-1], self.data_received_per_round[-1])
+        self.gui.update_node_info(self.id, self.current_round, self.x_curr, self.time_taken_per_round[-1], self.data_received_per_round[-1], self.beacon)
 
     def add_params(self, n, phi, N, s, a_coeff, x_0):
         self.N = N
@@ -61,6 +87,16 @@ class Node:
         if x_curr == pow(x_next, self.s, self.N):
             return True
         return False
+    
+    async def periodic_check(self):
+        while True:
+            if self.current_round < self.beacon.get_highest_round_num() - 5:
+                self.current_round = self.beacon.get_highest_round_num()
+                self.x_curr = self.beacon.get_latest_x_curr()
+                print(f"Node {self.id} updated its state to match the beacon")
+                self.update_gui()
+            await asyncio.sleep(5)  # Check every 5 seconds
+
 
     async def start(self):
         server = await asyncio.start_server(self.server_callback, 'localhost', 8000 + self.id)
@@ -68,7 +104,8 @@ class Node:
         self.data_received_in_bytes = 0
         async with server:
             await asyncio.gather(
-                asyncio.create_task(self.send_messages())
+                asyncio.create_task(self.send_messages()),
+                asyncio.create_task(self.periodic_check()),
             )
 
     async def send_messages(self):
@@ -115,6 +152,7 @@ class Node:
                 if self._verify(x_next, self.x_curr):
                     print(f"Node {self.id} verified the share")
                     self.x_curr = x_next
+                    self.beacon.update_beacon(self.current_round, self.x_curr)
                 else:
                     print(f"Node {self.id} failed to verify the share")
                 
@@ -140,9 +178,9 @@ async def main():
     x_0 = gen(math.factorial(n), N)
 
     gui = NodeGUI(n)
-    # gui.start()
+    beacon = Beacon(x_0, N, s)
 
-    nodes = [Node(i, gui) for i in range(NUM_NODES)]
+    nodes = [Node(i, gui, beacon) for i in range(NUM_NODES)]
     for node in nodes:
         node.add_params(n, phi, N, s, a_coeff, x_0)
 
