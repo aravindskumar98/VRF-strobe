@@ -26,8 +26,10 @@ class NodeGUI:
             label.grid(column=0, row=i, padx=5, pady=5)
             self.nodes[i] = label
 
-    def update_node_info(self, node_id, round_num, rand_num, prev_round_time, data_received):
-        self.nodes[node_id].config(text=f"Node {node_id}: Round {round_num} - Random Number: {rand_num} - Time Taken: {prev_round_time:.3f} sec - Data Received: {data_received} bytes")
-
+    def update_node_info(self, node_id, round_num, rand_num, prev_round_time, data_received, status):
+        if status == "mal":
+            self.nodes[node_id].config(text=f"Node {node_id}: Round {round_num} - Random Number: {rand_num} - Time Taken: {prev_round_time:.3f} sec - Data Received: {data_received} bytes", foreground="red")
+        else:
+            self.nodes[node_id].config(text=f"Node {node_id}: Round {round_num} - Random Number: {rand_num} - Time Taken: {prev_round_time:.3f} sec - Data Received: {data_received} bytes", foreground="green")
     def update(self):
         self.root.update()

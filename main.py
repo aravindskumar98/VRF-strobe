@@ -30,7 +30,7 @@ class Node:
 
     # Update the GUI when a new round is reached
     def update_gui(self):
-        self.gui.update_node_info(self.id, self.current_round, self.x_curr, self.time_taken_per_round[-1], self.data_received_per_round[-1])
+        self.gui.update_node_info(self.id, self.current_round, self.x_curr, self.time_taken_per_round[-1], self.data_received_per_round[-1], self.status)
 
     def add_params(self, n, phi, N, s, a_coeff, x_0):
         self.N = N
@@ -82,12 +82,12 @@ class Node:
 
         while True:
             msg = {"sender": self.id, "round": self.current_round, "prev_output": self.prev_output, "x_part": self._eval()}
-            options = [i for i in range(NUM_NODES) if i != self.id]
+            options = [i for i in range(NUM_NODES)] # if i != self.id]
             random.shuffle(options)
             for i in options:
-                if i != self.id:
-                    await self.send_message_to_socket(i, msg)
-                    await asyncio.sleep(random.uniform(0.1, 0.5))  # Add random small delay
+                # if i != self.id:
+                await self.send_message_to_socket(i, msg)
+                await asyncio.sleep(random.uniform(0.1, 0.5))  # Add random small delay
 
             await asyncio.sleep(0.1)  # Wait for the next round
 
@@ -105,6 +105,8 @@ class Node:
         data = await reader.read(100)
         self.data_received_in_bytes += len(data)
         msg = json.loads(data.decode())
+        if self.id == 2:
+            print(f"Node {self.id} received message {msg}")
 
         round_num = msg["round"]
         msg_sender = msg["sender"]
